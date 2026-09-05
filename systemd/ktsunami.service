@@ -1,0 +1,13 @@
+[Unit]
+Description=Kurage 津波浸水想定マップ (ktsunami) :18380
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/ktsunami
+ExecStart=/opt/ktsunami/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 18380
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
