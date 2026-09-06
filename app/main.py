@@ -15,7 +15,9 @@ khazard / krefuge の設計原則を引き継ぐ:
 出典: 国土数値情報「津波浸水想定データ」（国土交通省）
       ＜オープンデータとして利用可（商用利用可・再配信可）＞
 """
+import json
 import os
+import re
 import sqlite3
 import time
 from collections import defaultdict
@@ -300,6 +302,8 @@ button:disabled{opacity:.5}
 実測したところ、愛知県は令和4年度、静岡県と高知県は平成28年度でした。
 本サービスは判定結果に、その県のデータがいつのものかを併記します。
 時点が確認できないデータでは判定しません。</p>
+<h2>主要都市から探す</h2>
+<p><a href="area/aichi-nagoya">名古屋市</a>・<a href="area/osaka-osaka">大阪市</a>・<a href="area/kanagawa-yokohama">横浜市</a>・<a href="area/kochi-kochi">高知市</a>・<a href="area/miyagi-sendai">仙台市</a>・<a href="area/shizuoka-shizuoka">静岡市</a>ほか <a href="area/">地域一覧はこちら</a></p>
 <h2>あわせて確認したい方へ</h2>
 <p>津波で使える避難所がどこにあり、そこまで徒歩何分かは
 <a href="/krefuge.php/">Kurage 避難所マップ</a>で調べられます。
@@ -364,3 +368,110 @@ f.addEventListener('submit',function(e){e.preventDefault();run();});
 @app.get("/", response_class=HTMLResponse)
 def index():
     return HTMLResponse(PAGE)
+
+
+# ---- 地域ページ（「名古屋 津波」等の地域名×災害の無競合ロングテールを取る） ----
+# 2026-09-06 実測: 名古屋ハザードマップ1,900/指数0・愛知県津波ハザードマップ480・
+# 名古屋津波320・高知津波1,000・仙台津波1,000 いずれも競合指数0。都市名を主題にした
+# 個別ランディングで拾う。薄いページにしないため、県の収録区画数・データ時点・
+# 近隣製品への実リンクを必ず入れる。CSS/JSは本体PAGEから取り出して共有する。
+_STYLE = re.search(r"<style>.*?</style>", PAGE, re.S).group(0)
+# 地域ページは /ktsunami.php/area/<slug> と1階層深いので、本体の相対 fetch('api/check')
+# のままだと /area/api/check を叩いて404になる。共有JSのAPIパスを ../ で補正する。
+_SCRIPT = re.search(r"<script>.*?</script>", PAGE, re.S).group(0).replace("'api/check", "'../api/check")
+
+AREAS = [
+    ("aichi-nagoya", "名古屋市", "23", "愛知県", "愛知県名古屋市港区港明"),
+    ("aichi-toyohashi", "豊橋市", "23", "愛知県", "愛知県豊橋市神野新田町"),
+    ("osaka-osaka", "大阪市", "27", "大阪府", "大阪府大阪市住之江区南港北"),
+    ("kanagawa-yokohama", "横浜市", "14", "神奈川県", "神奈川県横浜市中区海岸通"),
+    ("shizuoka-shizuoka", "静岡市", "22", "静岡県", "静岡県静岡市清水区港町"),
+    ("kochi-kochi", "高知市", "39", "高知県", "高知県高知市種崎"),
+    ("miyagi-sendai", "仙台市", "04", "宮城県", "宮城県仙台市宮城野区蒲生"),
+    ("hyogo-kobe", "神戸市", "28", "兵庫県", "兵庫県神戸市中央区波止場町"),
+    ("fukuoka-fukuoka", "福岡市", "40", "福岡県", "福岡県福岡市博多区沖浜町"),
+    ("wakayama-wakayama", "和歌山市", "30", "和歌山県", "和歌山県和歌山市湊"),
+]
+AREA_BY_SLUG = {a[0]: a for a in AREAS}
+
+
+def _area_head(city, pref, slug, desc):
+    url = "https://kurage.exbridge.jp/ktsunami.php/area/" + slug
+    title = city + "の津波浸水想定マップ｜住所を入れて浸水の深さと海抜を調べる | Kurage"
+    ga = ('<script async src="https://www.googletagmanager.com/gtag/js?id=G-BP0650KDFR"></script>'
+          '<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}'
+          "gtag('js',new Date());gtag('config','G-BP0650KDFR');</script>")
+    bc = json.dumps({"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [
+        {"@type": "ListItem", "position": 1, "name": "Kurage 津波浸水想定マップ",
+         "item": "https://kurage.exbridge.jp/ktsunami.php/"},
+        {"@type": "ListItem", "position": 2, "name": city, "item": url}]}, ensure_ascii=False)
+    faq = json.dumps({"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+        {"@type": "Question", "name": city + "の津波浸水想定はどこで調べられますか？",
+         "acceptedAnswer": {"@type": "Answer", "text": "このページで" + city + "の住所を入れると、津波浸水想定の深さと海抜が表示されます。" + pref + "が公表したデータにもとづく参考情報で、最終確認は自治体の最新ハザードマップで行ってください。"}}]}, ensure_ascii=False)
+    return ('<!doctype html><html lang="ja"><head><meta charset="utf-8">'
+            '<meta name="viewport" content="width=device-width,initial-scale=1">'
+            "<title>" + title + "</title>"
+            '<meta name="description" content="' + desc + '">'
+            '<link rel="canonical" href="' + url + '">'
+            '<meta property="og:type" content="website">'
+            '<meta property="og:title" content="' + city + 'の津波浸水想定マップ｜Kurage">'
+            '<meta property="og:description" content="' + desc + '">'
+            '<meta property="og:url" content="' + url + '">'
+            '<meta property="og:image" content="https://kurage.exbridge.jp/pv/ktsunami-pv-poster.jpg">'
+            '<meta name="twitter:card" content="summary_large_image">'
+            '<script type="application/ld+json">' + bc + '</script>'
+            '<script type="application/ld+json">' + faq + '</script>' + ga)
+
+
+@app.get("/area/{slug}", response_class=HTMLResponse)
+def area(slug: str):
+    a = AREA_BY_SLUG.get(slug)
+    if not a:
+        raise HTTPException(404, "地域が見つかりません")
+    _, city, pcode, pref, example = a
+    ds = conn().cursor().execute("SELECT * FROM datasets WHERE pref_code=?", (pcode,)).fetchone()
+    cells = ("{:,}区画".format(ds["cells"])) if ds else "収録あり"
+    vint = ds["data_vintage"] if ds else "—"
+    exq = requests.utils.quote(example)
+    desc = (city + "（" + pref + "）の住所を入れると、津波で何メートル浸かる想定かと海抜を表示します。"
+            + pref + "が公表した津波浸水想定データを収録。無料・登録不要。データの時点も明記します。")
+    body = (
+        '<h1><a href="/ktsunami.php/">' + city + "の津波浸水想定マップ</a></h1>"
+        '<p class="lead">' + city + "（" + pref + "）の住所を入れると、その地点が<strong>津波で何メートル浸かる想定か</strong>を表示します。"
+        "<strong>海抜（標高）</strong>も一緒に出るので、避難先が今いる場所より高いかを判断できます。"
+        + pref + "の津波浸水想定データ（" + cells + "・データ時点 " + vint + "）を収録しています。</p>"
+        '<div class="card"><form id="f">'
+        '<input id="q" placeholder="例: ' + example + '" value="' + example + '" autocomplete="off">'
+        '<button id="b">調べる</button></form><div class="res" id="r"></div></div>'
+        '<section class="doc">'
+        "<h2>" + city + "で津波浸水想定を調べる</h2>"
+        "<p>" + city + "の沿岸部の住所を入れると、浸水深の区分（0.3m未満〜10m以上）と、"
+        "取るべき行動（垂直避難で足りるか、高台への水平避難が必要か）を返します。"
+        + pref + "が公表した津波浸水想定データにもとづきます。</p>"
+        "<h2>「区域外」と出たとき</h2>"
+        "<p>海から離れた" + city + "内陸部では、区域外であることに特別な意味はありません。"
+        "収録していない都道府県では「区域外」ではなく「未収録」と表示し、区別しています。</p>"
+        "<h2>あわせて確認したい方へ</h2>"
+        '<p>' + city + "で津波のとき使える避難所は "
+        '<a href="/krefuge.php/?q=' + exq + '&hazard=tsunami">避難所マップ</a>、土砂災害の警戒区域は '
+        '<a href="/khazard.php/?q=' + exq + '">土砂災害ハザードマップ</a> で調べられます。'
+        '全国版は <a href="/ktsunami.php/">Kurage 津波浸水想定マップ</a> です。</p></section>'
+        '<p class="src">出典: 国土数値情報「津波浸水想定データ」（国土交通省）を加工して作成'
+        "＜オープンデータとして利用可（商用利用可・再配信可）＞ ／"
+        "住所検索・標高: 国土地理院 地名検索API／標高API</p>")
+    html = _area_head(city, pref, slug, desc) + _STYLE + '</head><body><div class="wrap">' + body + _SCRIPT + "</body></html>"
+    return HTMLResponse(html)
+
+
+@app.get("/area", response_class=HTMLResponse)
+@app.get("/area/", response_class=HTMLResponse)
+def area_index():
+    links = "".join('<li><a href="/ktsunami.php/area/' + s + '">' + c + "の津波浸水想定マップ</a></li>"
+                    for s, c, *_ in AREAS)
+    desc = "主要な沿岸都市ごとの津波浸水想定マップの入口です。住所を入れると浸水深と海抜が分かります。"
+    html = (_area_head("地域一覧", "全国", "index", desc) + _STYLE
+            + '</head><body><div class="wrap"><h1>地域から津波浸水想定を調べる</h1>'
+            '<p class="lead">主要な沿岸都市ごとの入口です。全国版は '
+            '<a href="/ktsunami.php/">Kurage 津波浸水想定マップ</a> をどうぞ。</p>'
+            '<ul style="font-size:15px;line-height:2.2">' + links + "</ul></div></body></html>")
+    return HTMLResponse(html)
