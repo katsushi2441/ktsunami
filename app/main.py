@@ -306,6 +306,9 @@ button:disabled{opacity:.5}
 実測したところ、愛知県は令和4年度、静岡県と高知県は平成28年度でした。
 本サービスは判定結果に、その県のデータがいつのものかを併記します。
 時点が確認できないデータでは判定しません。</p>
+<h2>地図で見る</h2>
+<p>浸水想定区域を地図に重ねて表示します。クリックするとその地点の想定浸水深と海抜が出ます。 <a href="map/"><b>地図を開く</b></a></p>
+
 <h2>主要都市から探す</h2>
 <p><a href="area/aichi-nagoya">名古屋市</a>・<a href="area/osaka-osaka">大阪市</a>・<a href="area/kanagawa-yokohama">横浜市</a>・<a href="area/kochi-kochi">高知市</a>・<a href="area/miyagi-sendai">仙台市</a>・<a href="area/shizuoka-shizuoka">静岡市</a>ほか <a href="area/">地域一覧はこちら</a></p>
 <h2>あわせて確認したい方へ</h2>
@@ -497,6 +500,8 @@ _LLMS_BODY = """# Kurage 津波浸水想定マップ
 
 ## 使い方
 - 住所で調べる: https://kurage.exbridge.jp/ktsunami.php/?q=<住所>
+- 地図で見る: https://kurage.exbridge.jp/ktsunami.php/map/ （浸水想定を地図に重ねて表示。クリックした地点を判定）
+- 座標で判定するAPI: https://kurage.exbridge.jp/ktsunami.php/api/at?lat=<緯度>&lon=<経度>
 - API: https://kurage.exbridge.jp/ktsunami.php/api/check?q=<住所>
 
 ## 関連（同じ運営の防災ツール）
@@ -509,6 +514,242 @@ _LLMS_BODY = """# Kurage 津波浸水想定マップ
 
 # ---- AEO/GEO の標準セット（llms.txt / robots.txt / sitemap.xml）----
 # 他のKurage製品と同じ形にそろえる。AI検索に「何を答えるサイトか」を最初に渡す。
+_MAP_HTML = """<!doctype html><html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-BP0650KDFR"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','G-BP0650KDFR');</script>
+<script>(function(){var s=document.createElement('script');s.src='https://kurage.exbridge.jp/simpletrack.php?url='+encodeURIComponent(location.href)+'&ref='+encodeURIComponent(document.referrer);s.async=true;document.head.appendChild(s)})();</script>
+<title>地図で見る｜Kurage 津波浸水想定マップ</title>
+<meta name="description" content="津波浸水想定区域を地図で見られます。クリックするとその地点の想定浸水深と海抜を判定します。都道府県が公表する津波浸水想定データを収録。">
+<link rel="canonical" href="https://kurage.exbridge.jp/ktsunami.php/map/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="website"><meta property="og:site_name" content="Kurage">
+<meta property="og:title" content="地図で見る｜Kurage 津波浸水想定マップ">
+<meta property="og:description" content="津波浸水想定区域を地図で。クリックで浸水深と海抜を判定します。">
+<meta property="og:url" content="https://kurage.exbridge.jp/ktsunami.php/map/">
+<meta property="og:image" content="https://kurage.exbridge.jp/pv/ktsunami-pv-poster.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.css" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.js"></script>
+<style>
+:root{--ink:#12202f;--muted:#5a6a7a;--line:#dce7ea;--teal:#0a9a8f;--deep:#0a726b;--paper:#f7fbfa}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);line-height:1.75;
+ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif}
+header{background:#fff;border-bottom:1px solid var(--line)}
+.bar{max-width:1040px;margin:0 auto;padding:14px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.brand{font-weight:800;color:var(--ink);text-decoration:none;font-size:16px}
+.brand small{display:block;font-weight:500;font-size:11.5px;color:var(--muted)}
+.bar nav{margin-left:auto}.bar nav a{color:var(--deep);text-decoration:none;font-size:13.5px;margin-left:14px}
+main{max-width:1040px;margin:0 auto;padding:22px 20px 60px}
+h1{font-size:clamp(19px,3.2vw,25px);margin:0 0 8px}
+.muted{color:var(--muted);font-size:13.5px}
+.maprow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,320px);gap:14px;margin-top:14px}
+@media(max-width:820px){.maprow{grid-template-columns:minmax(0,1fr)}}
+#map{height:min(70vh,620px);border-radius:12px;border:1px solid var(--line);min-width:0}
+.side{min-width:0}
+.card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.legend{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:12.5px;margin-top:10px}
+.legend i{display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:-2px;margin-right:6px}
+.note{background:#fff8e8;border:1px solid #ecd8a7;border-radius:9px;padding:10px 12px;font-size:12.5px;margin:10px 0 0}
+form.search{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+input[type=text]{flex:1;min-width:min(100%,220px);padding:11px 13px;border:1px solid var(--line);border-radius:9px;font-size:15px}
+button.go{padding:11px 20px;border:0;border-radius:9px;background:linear-gradient(135deg,var(--teal),var(--deep));color:#fff;font-weight:700;cursor:pointer}
+table{border-collapse:collapse;width:100%;font-size:13.5px;margin:6px 0}
+th,td{border:1px solid var(--line);padding:6px 8px;text-align:left}
+th{background:#eef6f5;width:40%;white-space:nowrap}
+</style></head><body>
+<header><div class="bar">
+ <a class="brand" href="../">Kurage 津波浸水想定マップ<small>EXBRIDGE, INC.</small></a>
+ <nav><a href="../">住所で調べる</a><a href="./">地図で見る</a></nav>
+</div></header>
+<main>
+<h1>地図で見る</h1>
+<p class="muted">都道府県が公表する津波浸水想定です。<b>地図をクリック</b>するとその地点を判定します（海抜も出ます）。</p>
+
+<div class="maprow">
+ <div id="map"></div>
+ <div class="side">
+  <div class="card" id="result"><p class="muted" style="margin:0">地図をクリックすると、ここに判定が出ます。</p></div>
+  <div class="legend" id="legend"></div>
+  <div class="note" id="hint" hidden>もう少し<b>拡大</b>すると浸水想定が表示されます。</div>
+  <div class="note" id="trunc" hidden>この範囲はセルが多すぎて<b>一部しか表示していません</b>。拡大すると全部出ます。</div>
+  <div class="note"><b>色が付いていない＝安全ではありません。</b>想定を公表していない地域は収録していません。</div>
+ </div>
+</div>
+
+<form class="search" method="get" action="./">
+ <input type="text" name="q" value="__Q__" placeholder="住所で移動（例: 静岡県下田市）">
+ <button class="go" type="submit">移動</button>
+</form>
+</main>
+<script>
+var BASE='../';
+var COLORS=['#cfe8f5','#8fc9e8','#f0b429','#e8743b','#c0392b'];
+var LABELS=['0.3m未満','0.3〜1m','1〜3m','3〜5m','5m以上'];
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+(function(){var h='<b>想定される浸水深</b>';
+ for(var i=0;i<COLORS.length;i++){h+='<div><i style="background:'+COLORS[i]+'"></i>'+LABELS[i]+'</div>';}
+ document.getElementById('legend').innerHTML=h;})();
+var map=new maplibregl.Map({container:'map',
+ style:{version:8,sources:{gsi:{type:'raster',tiles:['https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png'],tileSize:256,attribution:'国土地理院'}},
+ layers:[{id:'gsi',type:'raster',source:'gsi'}]},
+ center:[__LON__,__LAT__],zoom:__ZOOM__});
+map.addControl(new maplibregl.NavigationControl({showCompass:false}),'top-right');
+var loading=false;
+function load(){
+ if(loading||map.getZoom()<13){document.getElementById('hint').hidden=false;
+  if(map.getSource('c'))map.getSource('c').setData({type:'FeatureCollection',features:[]});return;}
+ document.getElementById('hint').hidden=true; loading=true;
+ var b=map.getBounds();
+ fetch(BASE+'api/cells.geojson?bbox='+[b.getWest(),b.getSouth(),b.getEast(),b.getNorth()].join(','))
+  .then(function(r){return r.json()}).then(function(j){
+    if(j.features&&map.getSource('c'))map.getSource('c').setData(j);
+    document.getElementById('trunc').hidden=!j.truncated;
+  }).catch(function(){}).then(function(){loading=false;});
+}
+map.on('load',function(){
+ map.addSource('c',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
+ map.addLayer({id:'c',type:'fill',source:'c',
+  paint:{'fill-color':['match',['get','cls'],0,COLORS[0],1,COLORS[1],2,COLORS[2],3,COLORS[3],4,COLORS[4],'#ccc'],'fill-opacity':0.6}});
+ load();
+});
+map.on('moveend',load); map.on('zoomend',load);
+var marker=null;
+function judge(lat,lon){
+ document.getElementById('result').innerHTML='<p class="muted" style="margin:0">判定しています…</p>';
+ fetch(BASE+'api/at?lat='+lat+'&lon='+lon).then(function(r){return r.json()}).then(function(j){
+  var elev=(j.elevation&&j.elevation.m!=null)?('<tr><th>海抜</th><td>'+esc(j.elevation.m)+' m</td></tr>'):'';
+  var h='';
+  if(j.inundated){
+   h='<div style="font-weight:800;color:#c0392b;margin-bottom:6px">津波浸水想定区域の中です</div><table>'
+    +'<tr><th>想定される浸水深</th><td><b>'+esc(j.depth_label||'')+'</b></td></tr>'
+    +(j.pref_name?'<tr><th>公表</th><td>'+esc(j.pref_name)+'</td></tr>':'')+elev+'</table>'
+    +(j.advice?'<div class="note">'+esc(j.advice)+'</div>':'')
+    +'<p style="margin:10px 0 0"><a href="'+BASE+'" style="color:#0a726b">住所で詳しく調べる →</a></p>';
+  }else{
+   h='<div style="font-weight:800;color:#0a726b;margin-bottom:6px">想定区域には入っていません</div>'
+    +(elev?'<table>'+elev+'</table>':'')
+    +'<div class="note">'+esc(j.note||'')+'</div>';
+  }
+  document.getElementById('result').innerHTML=h;
+  if(marker)marker.remove();
+  marker=new maplibregl.Marker({color:'#0a9a8f'}).setLngLat([lon,lat]).addTo(map);
+ }).catch(function(){document.getElementById('result').innerHTML='<p class="muted" style="margin:0">判定できませんでした。もう一度クリックしてください。</p>';});
+}
+map.on('click',function(e){judge(+e.lngLat.lat.toFixed(6),+e.lngLat.lng.toFixed(6))});
+__AUTO__
+</script></body></html>"""
+
+
+# 浸水深の段階（depths.rank）を5色に畳む。実データの rank は
+# 0,1,30,50,100,200,300,400,500,1000,1500,2000 の12種類（全国で実測）
+def _depth_cls(rank):
+    if rank is None: return 0
+    if rank < 30:   return 0   # 0.3m未満
+    if rank < 100:  return 1   # 0.3〜1m
+    if rank < 300:  return 2   # 1〜3m（2m以上を含む区分もここ）
+    if rank < 500:  return 3   # 3〜5m
+    return 4                   # 5m以上
+
+
+@app.get("/api/at")
+def check_at(request: Request, lat: float, lon: float):
+    """座標での判定（地図クリック用）。住所を介さないので代表点のズレが無い。
+
+    区域外のとき「この付近が収録済みかどうか」を、周囲のセルの有無で実測して返す。
+    収録していない県を黙って「区域外」と答えると、安全だと誤解させる（/api/check と同じ方針）。
+    """
+    ip = request.client.host if request.client else "?"
+    if limited(ip, per_min=60):
+        raise HTTPException(429, "しばらく待ってからお試しください")
+    cur = conn().cursor()
+    row = cur.execute(
+        "SELECT d.label, d.rank, c.pref FROM cells_rtree r"
+        " JOIN cells c ON c.id = r.id JOIN depths d ON d.id = c.depth_id"
+        " WHERE ? BETWEEN r.min_lat AND r.max_lat AND ? BETWEEN r.min_lon AND r.max_lon"
+        " ORDER BY d.rank DESC LIMIT 1", (lat, lon)).fetchone()
+    out = {
+        "lat": lat, "lon": lon,
+        "inundated": bool(row),
+        "depth_label": row["label"] if row else None,
+        "rank": row["rank"] if row else None,
+        "advice": advice(row["rank"]) if row else None,
+        "elevation": elevation(lat, lon),
+        "pref_name": None,
+    }
+    if row:
+        ds = cur.execute("SELECT pref_name FROM datasets WHERE pref_code=?", (row["pref"],)).fetchone()
+        out["pref_name"] = ds["pref_name"] if ds else None
+        return JSONResponse(out)
+
+    # 約20km四方に収録セルがあるか。あれば「この付近は収録済みで、ここは区域外」と言い切れる。
+    d = 0.09
+    near = cur.execute(
+        "SELECT c.pref FROM cells_rtree r JOIN cells c ON c.id = r.id"
+        " WHERE r.max_lat >= ? AND r.min_lat <= ? AND r.max_lon >= ? AND r.min_lon <= ? LIMIT 1",
+        (lat - d, lat + d, lon - d, lon + d)).fetchone()
+    out["nearby_covered"] = bool(near)
+    if near:
+        ds = cur.execute("SELECT pref_name FROM datasets WHERE pref_code=?", (near["pref"],)).fetchone()
+        out["pref_name"] = ds["pref_name"] if ds else None
+        out["note"] = ("この付近の津波浸水想定は収録していますが、この地点は区域に含まれていません。"
+                       "想定を超える津波が起きないという意味ではありません。")
+    else:
+        out["note"] = ("この付近には収録している津波浸水想定がありません。"
+                       "内陸のため想定が作られていないか、その県が国土数値情報にまだ登録していない"
+                       "かのどちらかです。「区域外なので安全」という意味ではありません。")
+    return JSONResponse(out)
+
+
+@app.get("/api/cells.geojson")
+def cells_geojson(bbox: str = "", limit: int = 6000):
+    """表示範囲の浸水想定セルを GeoJSON で返す。bbox は minlon,minlat,maxlon,maxlat。
+
+    セルは緯度経度に平行な矩形で、四隅が cells_rtree に入っている。
+    ポリゴンを保存していないので、そこから組み立てて返す。
+    """
+    try:
+        minlon, minlat, maxlon, maxlat = [float(v) for v in bbox.split(",")]
+    except ValueError:
+        return JSONResponse({"error": "bbox は minlon,minlat,maxlon,maxlat の形で渡してください"}, status_code=400)
+    c = conn()
+    try:
+        rows = c.execute(
+            "SELECT r.min_lon, r.min_lat, r.max_lon, r.max_lat, d.label, d.rank"
+            " FROM cells_rtree r JOIN cells x ON x.id = r.id JOIN depths d ON d.id = x.depth_id"
+            " WHERE r.max_lat >= ? AND r.min_lat <= ? AND r.max_lon >= ? AND r.min_lon <= ?"
+            " LIMIT ?", (minlat, maxlat, minlon, maxlon, int(limit))).fetchall()
+    finally:
+        c.close()
+    feats = [{
+        "type": "Feature",
+        "geometry": {"type": "Polygon", "coordinates": [[
+            [r["min_lon"], r["min_lat"]], [r["max_lon"], r["min_lat"]],
+            [r["max_lon"], r["max_lat"]], [r["min_lon"], r["max_lat"]], [r["min_lon"], r["min_lat"]]]]},
+        "properties": {"cls": _depth_cls(r["rank"]), "label": r["label"] or ""},
+    } for r in rows]
+    return {"type": "FeatureCollection", "features": feats, "truncated": len(feats) >= limit}
+
+
+@app.get("/map/", response_class=HTMLResponse)
+def map_page(lat: float = None, lon: float = None, q: str = ""):
+    if q.strip() and lat is None:
+        try:
+            g = geocode(q.strip())
+            if g:
+                lat, lon = g["lat"], g["lon"]
+        except Exception:
+            pass
+    return HTMLResponse(_MAP_HTML
+        .replace("__LAT__", str(lat if lat is not None else 34.7)) 
+        .replace("__LON__", str(lon if lon is not None else 138.0))
+        .replace("__ZOOM__", "15" if lat is not None else "11")
+        .replace("__Q__", (q or "")[:100].replace('"', "&quot;"))
+        .replace("__AUTO__", ("map.on('load',function(){judge(%r,%r)});" % (lat, lon))
+                             if lat is not None else ""))
+
+
 @app.get("/robots.txt", response_class=PlainTextResponse)
 def _robots():
     return "User-agent: *\nAllow: /\n\nSitemap: https://kurage.exbridge.jp/ktsunami.php/sitemap.xml\n"
@@ -516,9 +757,12 @@ def _robots():
 
 @app.get("/sitemap.xml")
 def _sitemap():
+    base = "https://kurage.exbridge.jp/ktsunami.php"
+    urls = ["/", "/map/", "/area/"] + ["/area/" + a[0] for a in AREAS]
     xml = ('<?xml version="1.0" encoding="UTF-8"?>'
            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
-           + '<url><loc>https://kurage.exbridge.jp/ktsunami.php/</loc><changefreq>monthly</changefreq></url>' + '</urlset>')
+           + "".join(f'<url><loc>{base}{u}</loc><changefreq>monthly</changefreq></url>' for u in urls)
+           + '</urlset>')
     return Response(content=xml, media_type="application/xml")
 
 

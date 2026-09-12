@@ -4,3 +4,11 @@ __pycache__/
 *.pyc
 data/raw
 data/ktsunami.db
+
+# 秘密・バックアップ（.env だけでなく派生形も必ず）
+.env
+.env.*
+*.env
+*.env.bak*
+*.bak
+*.bak-*
