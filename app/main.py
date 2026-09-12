@@ -24,7 +24,7 @@ from collections import defaultdict
 
 import requests
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB = os.path.join(ROOT, "data", "ktsunami.db")
@@ -215,6 +215,7 @@ def healthz():
 
 PAGE = """<!doctype html><html lang="ja"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-BP0650KDFR"></script><script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','G-BP0650KDFR');</script>
 <title>Kurage 津波浸水想定マップ | 住所から津波で何メートル浸かるかを調べる</title>
 <meta name="description" content="住所を入れると、その地点の津波浸水想定の深さ（何メートル浸かる想定か）を表示します。海抜も一緒に出るので、避難先が今いる場所より高いかを判断できます。都道府県が公表する津波浸水想定データを収録し、判定に使ったデータの時点も県ごとに表示します。">
 <link rel="canonical" href="https://kurage.exbridge.jp/ktsunami.php/">
@@ -223,6 +224,9 @@ PAGE = """<!doctype html><html lang="ja"><head>
 <meta property="og:description" content="津波で何メートル浸かる想定かを住所から表示。海抜も併記。データの時点は県ごとに明示します。">
 <meta property="og:url" content="https://kurage.exbridge.jp/ktsunami.php/">
 <meta name="twitter:card" content="summary_large_image">
+<meta property="og:image" content="https://kurage.exbridge.jp/pv/ktsunami-pv-poster.jpg">
+<meta property="og:locale" content="ja_JP">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "津波で自宅が何メートル浸かるかは、どうやって調べますか？", "acceptedAnswer": {"@type": "Answer", "text": "都道府県が公表している津波浸水想定で確認します。このサイトでは住所を入れると、その地点の想定浸水深と海抜を表示します。国土交通省の国土数値情報（津波浸水想定）を収録しており、判定に使ったデータの時点も県ごとに表示します。"}}, {"@type": "Question", "name": "「区域外」と表示されれば安全ですか？", "acceptedAnswer": {"@type": "Answer", "text": "いいえ。津波浸水想定を公表していない地域は「未収録」であって、津波が来ないという意味ではありません。また想定は前提を置いた計算であり、実際の浸水がこのとおりになると決まっているわけでもありません。"}}, {"@type": "Question", "name": "海抜も一緒に表示されるのはなぜですか？", "acceptedAnswer": {"@type": "Answer", "text": "避難先が今いる場所より高いかどうかを判断するためです。浸水深だけでは、どこへ逃げれば足りるのかが分かりません。"}}, {"@type": "Question", "name": "この判定は公的な証明になりますか？", "acceptedAnswer": {"@type": "Answer", "text": "なりません。住所から求めた代表点による参考情報です。避難計画は自治体の最新のハザードマップと避難所情報で確認してください。"}}]}</script>
 <style>
 *{box-sizing:border-box}
 body{margin:0;background:#fff;color:#12202f;line-height:1.75;
@@ -475,3 +479,49 @@ def area_index():
             '<a href="/ktsunami.php/">Kurage 津波浸水想定マップ</a> をどうぞ。</p>'
             '<ul style="font-size:15px;line-height:2.2">' + links + "</ul></div></body></html>")
     return HTMLResponse(html)
+
+
+_LLMS_BODY = """# Kurage 津波浸水想定マップ
+
+> 住所を入れると、津波浸水想定区域の内外と想定される浸水深を返すサイト。海抜も併記する。
+
+## 収録
+- セル数: 3,795,197
+- 都道府県: 35（津波浸水想定を公表している都道府県）
+- 出典: 国土交通省 国土数値情報（津波浸水想定）を加工して作成
+
+## 大事な区別
+- **「区域外」は「安全」ではない。** 想定を公表していない地域は「未収録」であって、
+  津波が来ないという意味ではない。
+- これは想定であり、実際の浸水がこのとおりになると決まっているわけではない。
+
+## 使い方
+- 住所で調べる: https://kurage.exbridge.jp/ktsunami.php/?q=<住所>
+- API: https://kurage.exbridge.jp/ktsunami.php/api/check?q=<住所>
+
+## 関連（同じ運営の防災ツール）
+- 洪水・内水・高潮: https://kurage.exbridge.jp/kflood.php/
+- 土砂災害: https://kurage.exbridge.jp/khazard.php/
+- 避難所: https://kurage.exbridge.jp/krefuge.php/
+
+運営: 株式会社エクスブリッジ https://exbridge.jp/
+"""
+
+# ---- AEO/GEO の標準セット（llms.txt / robots.txt / sitemap.xml）----
+# 他のKurage製品と同じ形にそろえる。AI検索に「何を答えるサイトか」を最初に渡す。
+@app.get("/robots.txt", response_class=PlainTextResponse)
+def _robots():
+    return "User-agent: *\nAllow: /\n\nSitemap: https://kurage.exbridge.jp/ktsunami.php/sitemap.xml\n"
+
+
+@app.get("/sitemap.xml")
+def _sitemap():
+    xml = ('<?xml version="1.0" encoding="UTF-8"?>'
+           '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+           + '<url><loc>https://kurage.exbridge.jp/ktsunami.php/</loc><changefreq>monthly</changefreq></url>' + '</urlset>')
+    return Response(content=xml, media_type="application/xml")
+
+
+@app.get("/llms.txt", response_class=PlainTextResponse)
+def _llms():
+    return _LLMS_BODY
