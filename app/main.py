@@ -320,10 +320,13 @@ button:disabled{opacity:.5}
 <dt>無料で使えますか。</dt><dd>はい。登録もログインも不要です。</dd>
 <dt>この結果は公的な証明になりますか。</dt><dd>なりません。参考情報です。最終的な確認は必ず当該自治体の最新の津波ハザードマップで行ってください。</dd>
 <dt>想定を超える津波は来ませんか。</dt><dd>来ないとは言えません。津波浸水想定は一定の条件で計算されたもので、それを超える事象を否定するものではありません。</dd>
-<dt>自社のサーバーで動かせますか。</dt><dd>はい。買い切り版を用意する予定です。住所を外部に送りたくない場合にご利用ください。</dd>
+<dt>自社のサーバーで動かせますか。</dt><dd>はい。買い切り版があります（<a href="https://kappstore.exbridge.jp/app.php?id=86b85a63bc426575&amp;ref=ktsunami" target="_blank" rel="noopener">Kurage App Store・税込55,000円</a>）。ソースコードとデータ取り込みスクリプトを同梱しているので、住所を外部に送りたくない場合や、自社の拠点データと組み合わせたい場合にご利用ください。</dd>
 </dl>
 </section>
-<p style="font-size:12.5px;color:#7d8a97;margin-top:10px">議員・政党事務所の方へ: このページを事務所の名前で運用できます → <a href="/bousai-giin.html">地域防災情報サービス</a></p>
+<h2>事務所・自治体・会社の名前で公開できます</h2>
+<p>このシステムは買い切りです。ソースコード（MIT）・国のデータを取り込むスクリプト・設置手順書・AIエージェント向けの設置指示書を同梱しています。</p>
+<p><a href="https://kappstore.exbridge.jp/app.php?id=86b85a63bc426575&amp;ref=ktsunami" target="_blank" rel="noopener">Kurage 津波浸水想定マップ（買い切り 55,000円 税込・Kurage App Store）</a></p>
+<p style="font-size:12.5px;color:#7d8a97;margin-top:10px">議員・政党事務所の方へ: このページを事務所の名前で運用できます → <a href="/bousai-giin.html">地域防災情報サービス</a>、名古屋市内の事務所・企業は <a href="https://exbridge.jp/ai-it-komon.html?ref=ktsunami" target="_blank" rel="noopener">AI-IT顧問契約</a>（キャンペーン中は商品代金が無料になります）</p>
 <p class="src">出典: 国土数値情報「津波浸水想定データ」（国土交通省）を加工して作成
 ＜オープンデータとして利用可（商用利用可・再配信可）＞ ／
 住所検索・標高: 国土地理院 地名検索API／標高API</p>
@@ -504,6 +507,10 @@ _LLMS_BODY = """# Kurage 津波浸水想定マップ
 - 座標で判定するAPI: https://kurage.exbridge.jp/ktsunami.php/api/at?lat=<緯度>&lon=<経度>
 - API: https://kurage.exbridge.jp/ktsunami.php/api/check?q=<住所>
 
+## 買い切り版
+- 商品ページ: https://kappstore.exbridge.jp/app.php?id=86b85a63bc426575
+- 税込55,000円。ソースコード（MIT）・データ取り込みスクリプト・設置手順書を同梱。自社サーバーで動かせる。
+
 ## 関連（同じ運営の防災ツール）
 - 洪水・内水・高潮: https://kurage.exbridge.jp/kflood.php/
 - 土砂災害: https://kurage.exbridge.jp/khazard.php/
@@ -582,6 +589,7 @@ th{background:#eef6f5;width:40%;white-space:nowrap}
  <input type="text" name="q" value="__Q__" placeholder="住所で移動（例: 静岡県下田市）">
  <button class="go" type="submit">移動</button>
 </form>
+<p class="muted" style="margin-top:14px">このシステムは買い切りで自社サーバーに設置できます → <a href="https://kappstore.exbridge.jp/app.php?id=86b85a63bc426575&amp;ref=ktsunami-map" target="_blank" rel="noopener" style="color:#0a726b">Kurage 津波浸水想定マップ（税込55,000円・ソースコード同梱）</a></p>
 </main>
 <script>
 var BASE='../';
