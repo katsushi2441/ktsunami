@@ -390,24 +390,48 @@ _STYLE = re.search(r"<style>.*?</style>", PAGE, re.S).group(0)
 # のままだと /area/api/check を叩いて404になる。共有JSのAPIパスを ../ で補正する。
 _SCRIPT = re.search(r"<script>.*?</script>", PAGE, re.S).group(0).replace("'api/check", "'../api/check")
 
-AREAS = [
-    ("aichi-nagoya", "名古屋市", "23", "愛知県", "愛知県名古屋市港区港明"),
-    ("aichi-toyohashi", "豊橋市", "23", "愛知県", "愛知県豊橋市神野新田町"),
-    ("osaka-osaka", "大阪市", "27", "大阪府", "大阪府大阪市住之江区南港北"),
-    ("kanagawa-yokohama", "横浜市", "14", "神奈川県", "神奈川県横浜市中区海岸通"),
-    ("shizuoka-shizuoka", "静岡市", "22", "静岡県", "静岡県静岡市清水区港町"),
-    ("kochi-kochi", "高知市", "39", "高知県", "高知県高知市種崎"),
-    ("miyagi-sendai", "仙台市", "04", "宮城県", "宮城県仙台市宮城野区蒲生"),
-    ("hyogo-kobe", "神戸市", "28", "兵庫県", "兵庫県神戸市中央区波止場町"),
-    ("fukuoka-fukuoka", "福岡市", "40", "福岡県", "福岡県福岡市博多区沖浜町"),
-    ("wakayama-wakayama", "和歌山市", "30", "和歌山県", "和歌山県和歌山市湊"),
-]
-AREA_BY_SLUG = {a[0]: a for a in AREAS}
+# 既にインデックス済みの10本の romaji スラッグは canonical として据え置く。新規は団体コード。
+LEGACY_SLUG = {
+    "23100": "aichi-nagoya", "23201": "aichi-toyohashi", "27100": "osaka-osaka",
+    "14100": "kanagawa-yokohama", "22100": "shizuoka-shizuoka", "39201": "kochi-kochi",
+    "04100": "miyagi-sendai", "28100": "hyogo-kobe", "40130": "fukuoka-fukuoka",
+    "30201": "wakayama-wakayama",
+}
+SLUG_BY_CODE = dict(LEGACY_SLUG)
+CODE_BY_SLUG = {v: k for k, v in LEGACY_SLUG.items()}
 
 
-def _area_head(city, pref, slug, desc):
+def _load_muni():
+    """muni_stats（scripts/build_muni_stats.py が作る）を起動時に読む。1,279件。"""
+    out = {}
+    try:
+        c = conn()
+        for r in c.execute("SELECT * FROM muni_stats"):
+            d = dict(r)
+            d["samples"] = json.loads(d["samples"] or "[]")
+            out[d["muni_code"]] = d
+    except Exception as e:  # noqa: BLE001
+        print("muni_stats を読めません（地域ページは主要都市のみ）:", e)
+    return out
+
+
+MUNI = _load_muni()
+for _c in MUNI:
+    SLUG_BY_CODE.setdefault(_c, _c)
+    CODE_BY_SLUG.setdefault(SLUG_BY_CODE[_c], _c)
+MUNI_BY_PREF = {}
+for _d in sorted(MUNI.values(), key=lambda x: -x["inundated"]):
+    MUNI_BY_PREF.setdefault(_d["pref_code"], []).append(_d)
+
+
+def _muni_of(slug):
+    code = CODE_BY_SLUG.get(slug) or (slug if slug in MUNI else None)
+    return MUNI.get(code) if code else None
+
+
+def _area_head(city, pref, slug, desc, title=None):
     url = "https://kurage.exbridge.jp/ktsunami.php/area/" + slug
-    title = city + "の津波浸水想定マップ｜住所を入れて浸水の深さと海抜を調べる | Kurage"
+    title = title or (city + "の津波浸水想定マップ｜住所を入れて浸水の深さと海抜を調べる | Kurage")
     ga = ('<script async src="https://www.googletagmanager.com/gtag/js?id=G-BP0650KDFR"></script>'
           '<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}'
           "gtag('js',new Date());gtag('config','G-BP0650KDFR');</script>")
@@ -433,58 +457,167 @@ def _area_head(city, pref, slug, desc):
             '<script type="application/ld+json">' + faq + '</script>' + ga)
 
 
+_AREA_CSS = ("<style>.mgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0}"
+             ".mcard{border:1px solid #dfe6ea;border-radius:10px;padding:10px 12px;background:#fff;min-width:0}"
+             ".mcard.red{border-color:#e0b4b4;background:#fdf6f6}"
+             ".mk{font-size:12px;color:#5b6b76}.mv{font-size:19px;font-weight:700;color:#12202f;margin-top:3px}"
+             ".mlist{font-size:14px;line-height:2;columns:2;column-gap:22px}"
+             "@media(max-width:560px){.mlist{columns:1}}"
+             ".mtbl{width:100%;border-collapse:collapse;font-size:14px}.mtbl th,.mtbl td{border:1px solid #e3e9ec;padding:6px 8px;text-align:left}"
+             ".mtbl th{background:#f5f8f9;white-space:nowrap}.mwrap{overflow-x:auto}</style>")
+
+
+def _esc(t):
+    return (t or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+
+def _card(k, v, cls=""):
+    return '<div class="mcard %s"><div class="mk">%s</div><div class="mv">%s</div></div>' % (cls, k, v)
+
+
+@app.get("/area/pref/{pref_code}", response_class=HTMLResponse)
+def area_pref(pref_code: str):
+    """都道府県ごとの一覧。市区町村ページをクロールさせる内部リンクの束ね役。"""
+    lst = MUNI_BY_PREF.get(pref_code)
+    if not lst:
+        raise HTTPException(404, "その都道府県のページはありません")
+    pref = lst[0]["pref"]
+    ds = conn().cursor().execute("SELECT * FROM datasets WHERE pref_code=?", (pref_code,)).fetchone()
+    cells = "{:,}".format(ds["cells"]) if ds else "—"
+    vint = ds["data_vintage"] if ds else "—"
+    hit = [d for d in lst if d["inundated"]]
+    desc = ("%sの津波浸水想定は%s区画を収録。%s市区町村のうち%s市区町村で、指定緊急避難場所が浸水想定区域内にあります。"
+            "市区町村を選ぶか住所を入れると、浸水の深さと海抜が分かります。"
+            % (pref, cells, f"{len(lst):,}", f"{len(hit):,}"))
+    rows = "".join('<tr><td><a href="/ktsunami.php/area/%s">%s</a></td><td>%s</td><td>%s</td><td>%s</td></tr>'
+                   % (SLUG_BY_CODE[d["muni_code"]], d["muni"], f'{d["shelters"]:,}',
+                      f'{d["inundated"]:,}', _esc(d["max_label"]) or "—") for d in lst)
+    body = ('<h1><a href="/ktsunami.php/">%sの津波浸水想定（市区町村一覧）</a></h1>' % pref
+            + '<p class="lead">%sは津波浸水想定を<strong>%s区画</strong>公表しています（データ時点 %s）。'
+              'この県の<strong>%s市区町村</strong>のうち<strong>%s市区町村</strong>で、'
+              '指定緊急避難場所が浸水想定区域の中にあります。避難先そのものが浸かる想定かどうかは、'
+              '避難のときにどこへ行くかを決める材料になります。</p>'
+              % (pref, cells, _esc(vint), f"{len(lst):,}", f"{len(hit):,}")
+            + '<div class="mwrap"><table class="mtbl"><tr><th>市区町村</th><th>指定緊急避難場所</th>'
+              '<th>うち浸水想定区域内</th><th>最大の想定浸水深</th></tr>' + rows + '</table></div>'
+            + '<p class="src" style="margin-top:14px">全国版は <a href="/ktsunami.php/">Kurage 津波浸水想定マップ</a>、'
+              '地図は <a href="/ktsunami.php/map/">全国地図</a>、他県は <a href="/ktsunami.php/area/">地域一覧</a>。</p>'
+            + '<p class="src">避難所の件数は国土地理院「指定緊急避難場所データ」（CC BY 4.0）の施設の座標を、'
+              '%sの津波浸水想定に重ねて数えた実測値です。市域の面積に対する割合ではありません。</p>' % pref)
+    head = _area_head(pref, pref, "pref/" + pref_code, desc,
+                      title="%sの津波浸水想定｜市区町村別の避難場所と浸水想定 | Kurage" % pref)
+    return HTMLResponse(head + _STYLE + _AREA_CSS + '</head><body><div class="wrap">' + body + "</div></body></html>")
+
+
 @app.get("/area/{slug}", response_class=HTMLResponse)
 def area(slug: str):
-    a = AREA_BY_SLUG.get(slug)
-    if not a:
+    d = _muni_of(slug)
+    if not d:
         raise HTTPException(404, "地域が見つかりません")
-    _, city, pcode, pref, example = a
-    ds = conn().cursor().execute("SELECT * FROM datasets WHERE pref_code=?", (pcode,)).fetchone()
-    cells = ("{:,}区画".format(ds["cells"])) if ds else "収録あり"
+    city, pref = d["muni"], d["pref"]
+    full = pref + city
+    ds = conn().cursor().execute("SELECT * FROM datasets WHERE pref_code=?", (d["pref_code"],)).fetchone()
+    cells = "{:,}".format(ds["cells"]) if ds else "—"
     vint = ds["data_vintage"] if ds else "—"
+    n, ino = d["shelters"], d["inundated"]
+    samples = d["samples"] or []
+    example = samples[0]["address"] if samples else full
     exq = requests.utils.quote(example)
-    desc = (city + "（" + pref + "）の住所を入れると、津波で何メートル浸かる想定かと海抜を表示します。"
-            + pref + "が公表した津波浸水想定データを収録。無料・登録不要。データの時点も明記します。")
-    body = (
-        '<h1><a href="/ktsunami.php/">' + city + "の津波浸水想定マップ</a></h1>"
-        '<p class="lead">' + city + "（" + pref + "）の住所を入れると、その地点が<strong>津波で何メートル浸かる想定か</strong>を表示します。"
-        "<strong>海抜（標高）</strong>も一緒に出るので、避難先が今いる場所より高いかを判断できます。"
-        + pref + "の津波浸水想定データ（" + cells + "・データ時点 " + vint + "）を収録しています。</p>"
-        '<div class="card"><form id="f">'
-        '<input id="q" placeholder="例: ' + example + '" value="' + example + '" autocomplete="off">'
-        '<button id="b">調べる</button></form><div class="res" id="r"></div></div>'
-        '<section class="doc">'
-        "<h2>" + city + "で津波浸水想定を調べる</h2>"
-        "<p>" + city + "の沿岸部の住所を入れると、浸水深の区分（0.3m未満〜10m以上）と、"
-        "取るべき行動（垂直避難で足りるか、高台への水平避難が必要か）を返します。"
-        + pref + "が公表した津波浸水想定データにもとづきます。</p>"
-        "<h2>「区域外」と出たとき</h2>"
-        "<p>海から離れた" + city + "内陸部では、区域外であることに特別な意味はありません。"
-        "収録していない都道府県では「区域外」ではなく「未収録」と表示し、区別しています。</p>"
-        "<h2>あわせて確認したい方へ</h2>"
-        '<p>' + city + "で津波のとき使える避難所は "
-        '<a href="/krefuge.php/?q=' + exq + '&hazard=tsunami">避難所マップ</a>、土砂災害の警戒区域は '
-        '<a href="/khazard.php/?q=' + exq + '">土砂災害ハザードマップ</a> で調べられます。'
-        '全国版は <a href="/ktsunami.php/">Kurage 津波浸水想定マップ</a> です。</p></section>'
-        '<p class="src">出典: 国土数値情報「津波浸水想定データ」（国土交通省）を加工して作成'
-        "＜オープンデータとして利用可（商用利用可・再配信可）＞ ／"
-        "住所検索・標高: 国土地理院 地名検索API／標高API</p>")
-    html = _area_head(city, pref, slug, desc) + _STYLE + '</head><body><div class="wrap">' + body + _SCRIPT + "</body></html>"
-    return HTMLResponse(html)
+
+    if ino:
+        desc = ("%sの指定緊急避難場所%s件のうち、%s件が津波浸水想定区域の中にあります（最大の想定浸水深 %s）。"
+                "住所を入れると、その地点が何メートル浸かる想定かと海抜を表示します。"
+                % (full, f"{n:,}", f"{ino:,}", d["max_label"] or "—"))
+        lead = ('<p class="lead">%s では、指定緊急避難場所<strong>%s件</strong>のうち'
+                '<strong>%s件が津波浸水想定区域の中</strong>にあります。最大の想定浸水深は<strong>%s</strong>。'
+                '避難先そのものが浸かる想定かどうかは、どこへ逃げるかを決める材料になります。'
+                '住所を入れると、その地点の想定浸水深と海抜が出ます。</p>'
+                % (full, f"{n:,}", f"{ino:,}", _esc(d["max_label"] or "—")))
+        cards = (_card("指定緊急避難場所", "%s件" % f"{n:,}")
+                 + _card("うち浸水想定区域内", "%s件" % f"{ino:,}", "red")
+                 + _card("最大の想定浸水深", _esc(d["max_label"]) or "—", "red")
+                 + _card("津波にも使える指定", "%s件" % f'{d["tsunami_shelters"]:,}'))
+        note = ('<p class="src">「津波にも使える指定」は、その施設が津波の指定緊急避難場所になっている数です。'
+                'このうち%s件は浸水想定区域の中にあります（津波避難ビルのように、浸水しても上階へ逃げる前提で'
+                '指定されている場合があります）。</p>' % f'{d["tsunami_inundated"]:,}')
+        ex = ""
+        if samples:
+            ex = ('<h2>浸水想定区域の中にある避難場所の例</h2><div class="mwrap"><table class="mtbl">'
+                  '<tr><th>施設名</th><th>所在</th><th>想定浸水深</th><th>津波の指定</th></tr>%s</table></div>'
+                  % "".join("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>"
+                            % (_esc(s["name"]), _esc(s["address"]), _esc(s["depth"]),
+                               "あり" if s.get("tsunami_ok") else "なし") for s in samples))
+        stats = ('<section class="doc"><h2>%sの避難場所と津波浸水想定</h2><div class="mgrid">%s</div>%s%s</section>'
+                 % (city, cards, note, ex))
+    else:
+        desc = ("%sの指定緊急避難場所%s件は、いずれも津波浸水想定区域の外にあります（%sの公表データで実測）。"
+                "住所を入れると、その地点の想定と海抜を確かめられます。" % (full, f"{n:,}", pref))
+        lead = ('<p class="lead">%s の指定緊急避難場所<strong>%s件</strong>は、いずれも'
+                '<strong>津波浸水想定区域の外</strong>にありました。ただしこれは避難場所の位置についての結果で、'
+                '市内のどこにも浸水想定が無いという意味ではありません。住所を入れて確かめてください。</p>'
+                % (full, f"{n:,}"))
+        stats = ('<section class="doc"><h2>%sの避難場所と津波浸水想定</h2><div class="mgrid">%s</div>'
+                 '<p class="src">%sは津波浸水想定を%s区画公表しています（データ時点 %s）。'
+                 'この市区町村の避難場所はその区域に入っていない、というのがここで測った事実です。</p></section>'
+                 % (city, _card("指定緊急避難場所", "%s件" % f"{n:,}") + _card("うち浸水想定区域内", "0件"),
+                    pref, cells, _esc(vint)))
+
+    sib = [x for x in MUNI_BY_PREF.get(d["pref_code"], []) if x["muni_code"] != d["muni_code"]][:40]
+    sib_html = ""
+    if sib:
+        sib_html = ('<section class="doc"><h2>%sの他の市区町村</h2><div class="mlist">%s</div>'
+                    '<p class="src" style="margin-top:8px"><a href="/ktsunami.php/area/pref/%s">%sの全市区町村一覧</a></p></section>'
+                    % (pref, "".join('<a href="/ktsunami.php/area/%s">%s</a>（浸水想定内の避難場所%s件）<br>'
+                                     % (SLUG_BY_CODE[x["muni_code"]], x["muni"], f'{x["inundated"]:,}') for x in sib),
+                       d["pref_code"], pref))
+
+    body = ('<h1><a href="/ktsunami.php/">%sの津波浸水想定マップ</a></h1>' % full + lead
+            + '<div class="card"><form id="f"><input id="q" placeholder="例: %s" value="%s" autocomplete="off">'
+              '<button id="b">調べる</button></form><div class="res" id="r"></div></div>'
+              % (_esc(example), _esc(example))
+            + stats + sib_html
+            + '<section class="doc"><h2>あわせて確認したい方へ</h2><p>'
+              '%sで使える避難所は <a href="/krefuge.php/?q=%s&hazard=tsunami">避難所マップ</a>、'
+              '土砂災害警戒区域は <a href="/khazard.php/">土砂災害ハザードマップ</a>、'
+              '洪水は <a href="/kflood.php/">洪水・内水ハザードマップ</a> で調べられます。'
+              '地図で見るなら <a href="/ktsunami.php/map/">全国地図</a>、'
+              '全国版は <a href="/ktsunami.php/">Kurage 津波浸水想定マップ</a> です。</p></section>' % (full, exq)
+            + '<p class="src"><strong>「区域外」は「安全」ではありません。</strong>想定を公表していない区域は'
+              '「未収録」であって、津波が来ないという意味ではありません。'
+              '出典: 国土数値情報（津波浸水想定）国土交通省／%s ＜商用利用可・再配信可＞（%s区画・データ時点 %s）、'
+              '国土地理院「指定緊急避難場所データ」（CC BY 4.0）を加工して作成。'
+              '避難場所の件数は施設の座標を浸水想定に重ねて数えた実測値で、市域の面積に対する割合ではありません。</p>'
+              % (pref, cells, _esc(vint)))
+    head = _area_head(full, pref, SLUG_BY_CODE.get(d["muni_code"], d["muni_code"]), desc,
+                      title=("%sの津波浸水想定｜避難場所%s件中%s件が浸水想定区域内 | Kurage" % (full, f"{n:,}", f"{ino:,}"))
+                      if ino else ("%sの津波浸水想定｜避難場所%s件はすべて区域外 | Kurage" % (full, f"{n:,}")))
+    return HTMLResponse(head + _STYLE + _AREA_CSS + '</head><body><div class="wrap">' + body + _SCRIPT + "</body></html>")
 
 
 @app.get("/area", response_class=HTMLResponse)
 @app.get("/area/", response_class=HTMLResponse)
 def area_index():
-    links = "".join('<li><a href="/ktsunami.php/area/' + s + '">' + c + "の津波浸水想定マップ</a></li>"
-                    for s, c, *_ in AREAS)
-    desc = "主要な沿岸都市ごとの津波浸水想定マップの入口です。住所を入れると浸水深と海抜が分かります。"
-    html = (_area_head("地域一覧", "全国", "index", desc) + _STYLE
-            + '</head><body><div class="wrap"><h1>地域から津波浸水想定を調べる</h1>'
-            '<p class="lead">主要な沿岸都市ごとの入口です。全国版は '
-            '<a href="/ktsunami.php/">Kurage 津波浸水想定マップ</a> をどうぞ。</p>'
-            '<ul style="font-size:15px;line-height:2.2">' + links + "</ul></div></body></html>")
-    return HTMLResponse(html)
+    prefs = sorted(MUNI_BY_PREF.items(), key=lambda x: x[0])
+    hit = sum(1 for d in MUNI.values() if d["inundated"])
+    rows = "".join('<tr><td><a href="/ktsunami.php/area/pref/%s">%s</a></td><td>%s</td><td>%s</td></tr>'
+                   % (pc, lst[0]["pref"], f"{len(lst):,}",
+                      f'{sum(1 for x in lst if x["inundated"]):,}') for pc, lst in prefs)
+    desc = ("津波浸水想定を公表している%s都道府県・%s市区町村を一覧にしました。"
+            "うち%s市区町村で、指定緊急避難場所が浸水想定区域の中にあります。"
+            % (len(prefs), f"{len(MUNI):,}", f"{hit:,}"))
+    body = ('<h1><a href="/ktsunami.php/">地域から津波浸水想定を調べる</a></h1>'
+            '<p class="lead">津波浸水想定を公表している<strong>%s都道府県</strong>の'
+            '<strong>%s市区町村</strong>を収録しています。そのうち<strong>%s市区町村</strong>で、'
+            '指定緊急避難場所が浸水想定区域の中にありました。住所で直接調べるなら '
+            '<a href="/ktsunami.php/">全国版</a>、地図なら <a href="/ktsunami.php/map/">全国地図</a> をどうぞ。</p>'
+            % (len(prefs), f"{len(MUNI):,}", f"{hit:,}")
+            + '<div class="mwrap"><table class="mtbl"><tr><th>都道府県</th><th>市区町村</th>'
+              '<th>避難場所が浸水想定内にある市区町村</th></tr>' + rows + '</table></div>'
+            + '<p class="src" style="margin-top:14px"><strong>内陸の県はこの一覧に出ません。</strong>'
+              '津波浸水想定そのものが公表されていないためで、安全という意味ではありません。</p>')
+    head = _area_head("地域一覧", "全国", "", desc,
+                      title="全国の津波浸水想定｜都道府県・市区町村別の一覧 | Kurage")
+    return HTMLResponse(head + _STYLE + _AREA_CSS + '</head><body><div class="wrap">' + body + "</div></body></html>")
 
 
 _LLMS_BODY = """# Kurage 津波浸水想定マップ
@@ -766,7 +899,9 @@ def _robots():
 @app.get("/sitemap.xml")
 def _sitemap():
     base = "https://kurage.exbridge.jp/ktsunami.php"
-    urls = ["/", "/map/", "/area/"] + ["/area/" + a[0] for a in AREAS]
+    # 1,279市区町村＋35都道府県。枚数を出さないと検索の入口が増えない（2026-09-13 実測の結論）
+    urls = (["/", "/map/", "/area/"] + ["/area/pref/" + pc for pc in sorted(MUNI_BY_PREF)]
+            + ["/area/" + SLUG_BY_CODE[c] for c in sorted(MUNI)])
     xml = ('<?xml version="1.0" encoding="UTF-8"?>'
            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
            + "".join(f'<url><loc>{base}{u}</loc><changefreq>monthly</changefreq></url>' for u in urls)
