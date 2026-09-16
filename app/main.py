@@ -329,7 +329,7 @@ button:disabled{opacity:.5}
 <p style="font-size:12.5px;color:#7d8a97;margin-top:10px">議員・政党事務所の方へ: このページを事務所の名前で運用できます → <a href="/bousai-giin.html">地域防災情報サービス</a>、名古屋市内の事務所・企業は <a href="https://exbridge.jp/ai-it-komon.html?ref=ktsunami" target="_blank" rel="noopener">AI-IT顧問契約</a>（キャンペーン中は商品代金が無料になります）</p>
 <p class="src">出典: 国土数値情報「津波浸水想定データ」（国土交通省）を加工して作成
 ＜オープンデータとして利用可（商用利用可・再配信可）＞ ／
-住所検索・標高: 国土地理院 地名検索API／標高API</p>
+住所検索・標高: 国土地理院 地名検索API／標高API</p><p class="src"><a href="https://exbridge.jp/politech/#bousai?ref=kurage-ktsunami" rel="noopener">住民が検索している防災の言葉（32語）</a> ・ <a href="https://exbridge.jp/ai-system/?ref=kurage-ktsunami" rel="noopener">AIでできること</a> ・ <a href="https://exbridge.jp/solution/seito.html?ref=kurage-ktsunami" rel="noopener">政党・議員事務所むけ</a></p>
 </div>
 <script>
 var f=document.getElementById('f'),q=document.getElementById('q'),b=document.getElementById('b'),r=document.getElementById('r');
