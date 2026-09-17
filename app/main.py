@@ -38,6 +38,9 @@ _hits = defaultdict(list)
 
 
 def limited(ip, per_min=20):
+    # 相手が分からない＝自前のサーバー間呼び出し（client_ip がループバックを空で返す）。数えない。
+    if not ip:
+        return False
     now = time.time()
     _hits[ip] = [t for t in _hits[ip] if now - t < 60]
     if len(_hits[ip]) >= per_min:
@@ -65,6 +68,32 @@ def geocode(q):
     it = max(items, key=score)
     lon, lat = it["geometry"]["coordinates"]
     return {"lat": lat, "lon": lon, "label": it.get("properties", {}).get("title", q)}
+
+
+def client_ip(request) -> str:
+    """**プロキシ越しの本当の相手**を返す。
+
+    公開経路は heteml の <name>.php → このサーバーで、プロキシは
+    X-Forwarded-For に元の相手を入れて渡してくる。これを見ないで
+    request.client.host を使うと、**公開からの利用者が全員おなじIP**に見え、
+    誰か1人が20回叩いた時点で全員が429になる（2026-09-18 に kflood 以外の3本で発覚）。
+    ループバックは自前のサーバー間呼び出しなので数えない。
+    """
+    xff = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+    ip = xff or ((request.client.host if request.client else "") or "")
+    return "" if ip in ("127.0.0.1", "::1", "localhost") else ip
+
+
+def _point(q: str, lat=None, lon=None):
+    """座標が来たら住所検索をしない。
+
+    kflood のマイ・タイムラインは、すでに求めた代表点をそのまま渡してくる。
+    ここで引き直すと国土地理院を無駄に叩くうえ、**道具ごとに代表点がずれる**
+    おそれがある。座標が無いときだけ今までどおり住所から引く。
+    """
+    if lat is not None and lon is not None:
+        return {"lat": float(lat), "lon": float(lon), "label": (q or "").strip() or f"{lat},{lon}"}
+    return geocode(q)
 
 
 def elevation(lat, lon):
@@ -126,15 +155,15 @@ def advice(rank):
 
 
 @app.get("/api/check")
-def check(request: Request, q: str):
-    ip = request.client.host if request.client else "?"
+def check(request: Request, q: str = "", lat: float | None = None, lon: float | None = None):
+    ip = client_ip(request)
     if limited(ip):
         raise HTTPException(429, "しばらく待ってからお試しください")
     q = (q or "").strip()
-    if not q:
+    if not q and lat is None:
         raise HTTPException(400, "住所を入力してください")
     try:
-        g = geocode(q)
+        g = _point(q, lat, lon)
     except Exception:
         raise HTTPException(502, "住所検索に接続できませんでした")
     if not g:
@@ -922,7 +951,7 @@ def check_at(request: Request, lat: float, lon: float):
     区域外のとき「この付近が収録済みかどうか」を、周囲のセルの有無で実測して返す。
     収録していない県を黙って「区域外」と答えると、安全だと誤解させる（/api/check と同じ方針）。
     """
-    ip = request.client.host if request.client else "?"
+    ip = client_ip(request)
     if limited(ip, per_min=60):
         raise HTTPException(429, "しばらく待ってからお試しください")
     cur = conn().cursor()
