@@ -34,6 +34,8 @@ KREFUGE = "https://kurage.exbridge.jp/krefuge.php/"
 STALE_YEARS = 5
 
 app = FastAPI(title="Kurage 津波浸水想定マップ")
+from app import distmode  # noqa: E402  配布先で KURAGE_PUBLIC_ORIGIN を設定したときだけ働く
+distmode.install(app)
 _hits = defaultdict(list)
 
 
@@ -309,12 +311,12 @@ button:disabled{opacity:.5}
   </form>
   <div class="res" id="r"></div>
 </div>
-<div class="pv">
+<!--kurage-only--><div class="pv">
 <video src="https://kurage.exbridge.jp/pv/ktsunami-pv-30s.mp4"
        poster="https://kurage.exbridge.jp/pv/ktsunami-pv-poster.jpg"
        controls playsinline preload="none" width="1920" height="1080"></video>
 <p class="note-sm">冒頭8秒の実写映像は MiniMax H3（セルフホスト）で生成しています。</p>
-</div>
+</div><!--/kurage-only-->
 <section class="doc">
 <h2>「浸水するか」ではなく「何メートルか」を返します</h2>
 <p>0.3mと5mでは、取るべき行動がまったく違います。前者なら2階への垂直避難で足りることがありますが、
@@ -350,16 +352,16 @@ button:disabled{opacity:.5}
 <dt>無料で使えますか。</dt><dd>はい。登録もログインも不要です。</dd>
 <dt>この結果は公的な証明になりますか。</dt><dd>なりません。参考情報です。最終的な確認は必ず当該自治体の最新の津波ハザードマップで行ってください。</dd>
 <dt>想定を超える津波は来ませんか。</dt><dd>来ないとは言えません。津波浸水想定は一定の条件で計算されたもので、それを超える事象を否定するものではありません。</dd>
-<dt>自社のサーバーで動かせますか。</dt><dd>はい。買い切り版があります（<a href="https://kappstore.exbridge.jp/app.php?id=86b85a63bc426575&amp;ref=ktsunami" target="_blank" rel="noopener">Kurage App Store・税込55,000円</a>）。ソースコードとデータ取り込みスクリプトを同梱しているので、住所を外部に送りたくない場合や、自社の拠点データと組み合わせたい場合にご利用ください。</dd>
+<!--kurage-only--><dt>自社のサーバーで動かせますか。</dt><dd>はい。買い切り版があります（<a href="https://kappstore.exbridge.jp/app.php?id=86b85a63bc426575&amp;ref=ktsunami" target="_blank" rel="noopener">Kurage App Store・税込55,000円</a>）。ソースコードとデータ取り込みスクリプトを同梱しているので、住所を外部に送りたくない場合や、自社の拠点データと組み合わせたい場合にご利用ください。</dd><!--/kurage-only-->
 </dl>
 </section>
-<h2>事務所・自治体・会社の名前で公開できます</h2>
+<!--kurage-only--><h2>事務所・自治体・会社の名前で公開できます</h2>
 <p>このシステムは買い切りです。ソースコード（MIT）・国のデータを取り込むスクリプト・設置手順書・AIエージェント向けの設置指示書を同梱しています。</p>
 <p><a href="https://kappstore.exbridge.jp/app.php?id=86b85a63bc426575&amp;ref=ktsunami" target="_blank" rel="noopener">Kurage 津波浸水想定マップ（買い切り 55,000円 税込・Kurage App Store）</a></p>
-<p style="font-size:12.5px;color:#7d8a97;margin-top:10px">議員・政党事務所の方へ: このページを事務所の名前で運用できます → <a href="/bousai-giin.html">地域防災情報サービス</a>、名古屋市内の事務所・企業は <a href="https://exbridge.jp/ai-it-komon.html?ref=ktsunami" target="_blank" rel="noopener">AI-IT顧問契約</a>（キャンペーン中は商品代金が無料になります）</p>
+<p style="font-size:12.5px;color:#7d8a97;margin-top:10px">議員・政党事務所の方へ: このページを事務所の名前で運用できます → <a href="/bousai-giin.html">地域防災情報サービス</a>、名古屋市内の事務所・企業は <a href="https://exbridge.jp/ai-it-komon.html?ref=ktsunami" target="_blank" rel="noopener">AI-IT顧問契約</a>（キャンペーン中は商品代金が無料になります）</p><!--/kurage-only-->
 <p class="src">出典: 国土数値情報「津波浸水想定データ」（国土交通省）を加工して作成
 ＜オープンデータとして利用可（商用利用可・再配信可）＞ ／
-住所検索・標高: 国土地理院 地名検索API／標高API</p><p class="src"><a href="https://exbridge.jp/politech/#bousai?ref=kurage-ktsunami" rel="noopener">住民が検索している防災の言葉（32語）</a> ・ <a href="https://exbridge.jp/ai-system/?ref=kurage-ktsunami" rel="noopener">AIでできること</a> ・ <a href="https://exbridge.jp/solution/seito.html?ref=kurage-ktsunami" rel="noopener">政党・議員事務所むけ</a></p>
+住所検索・標高: 国土地理院 地名検索API／標高API</p><!--kurage-only--><p class="src"><a href="https://exbridge.jp/politech/#bousai?ref=kurage-ktsunami" rel="noopener">住民が検索している防災の言葉（32語）</a> ・ <a href="https://exbridge.jp/ai-system/?ref=kurage-ktsunami" rel="noopener">AIでできること</a> ・ <a href="https://exbridge.jp/solution/seito.html?ref=kurage-ktsunami" rel="noopener">政党・議員事務所むけ</a></p><!--/kurage-only-->
 </div>
 <script>
 var f=document.getElementById('f'),q=document.getElementById('q'),b=document.getElementById('b'),r=document.getElementById('r');
@@ -873,7 +875,7 @@ th{background:#eef6f5;width:40%;white-space:nowrap}
  <input type="text" name="q" value="__Q__" placeholder="住所で移動（例: 静岡県下田市）">
  <button class="go" type="submit">移動</button>
 </form>
-<p class="muted" style="margin-top:14px">このシステムは買い切りで自社サーバーに設置できます → <a href="https://kappstore.exbridge.jp/app.php?id=86b85a63bc426575&amp;ref=ktsunami-map" target="_blank" rel="noopener" style="color:#0a726b">Kurage 津波浸水想定マップ（税込55,000円・ソースコード同梱）</a></p>
+<!--kurage-only--><p class="muted" style="margin-top:14px">このシステムは買い切りで自社サーバーに設置できます → <a href="https://kappstore.exbridge.jp/app.php?id=86b85a63bc426575&amp;ref=ktsunami-map" target="_blank" rel="noopener" style="color:#0a726b">Kurage 津波浸水想定マップ（税込55,000円・ソースコード同梱）</a></p><!--/kurage-only-->
 </main>
 <script>
 var BASE='../';
