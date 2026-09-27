@@ -252,6 +252,7 @@ PAGE = """<!doctype html><html lang="ja"><head>
 <meta property="og:title" content="Kurage 津波浸水想定マップ｜住所から浸水の深さを調べる">
 <meta property="og:description" content="津波で何メートル浸かる想定かを住所から表示。海抜も併記。データの時点は県ごとに明示します。">
 <meta property="og:url" content="https://kurage.exbridge.jp/ktsunami.php/">
+<meta property="og:site_name" content="Kurage 津波浸水想定マップ">
 <meta name="twitter:card" content="summary_large_image">
 <meta property="og:image" content="https://kurage.exbridge.jp/pv/ktsunami-pv-poster.jpg">
 <meta property="og:locale" content="ja_JP">
