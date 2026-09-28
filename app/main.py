@@ -34,7 +34,7 @@ KREFUGE = "https://kurage.exbridge.jp/krefuge.php/"
 STALE_YEARS = 5
 
 app = FastAPI(title="Kurage 津波浸水想定マップ")
-from app import distmode  # noqa: E402  配布先で KURAGE_PUBLIC_ORIGIN を設定したときだけ働く
+from app import distmode, kbousai_link  # noqa: E402  配布先で KURAGE_PUBLIC_ORIGIN を設定したときだけ働く
 distmode.install(app)
 _hits = defaultdict(list)
 
@@ -301,6 +301,7 @@ button:disabled{opacity:.5}
 .faq dd{margin:5px 0 0;padding-left:16px;border-left:3px solid #e5ebf1;color:#37485a}
 </style></head><body><div class="wrap">
 <h1><a href="./">Kurage 津波浸水想定マップ</a></h1>
+<!--kurage-only--><div style="max-width:1000px;margin:12px auto 14px;background:#eef6fb;border:1px solid #bcd9ec;border-radius:10px;padding:10px 14px;font-size:14px;line-height:1.7;color:#16232e;box-sizing:border-box"><b>台風・大雨のときは、いま逃げた方がいい？</b> 住所か現在地で、警報・キキクル・台風の進路・川・津波・避難情報をまとめて答えます。 <a href="https://kurage.exbridge.jp/kbousai.php/?ref=ktsunami-top" style="font-weight:700;color:#0b5d8f">Kurage 防災AIチャットで聞く →</a></div><!--/kurage-only-->
 <p class="lead">住所を入れると、その地点が<strong>津波で何メートル浸かる想定か</strong>を表示します。
 <strong>海抜（標高）</strong>も一緒に出るので、避難先が今いる場所より高いかを判断できます。
 判定に使ったデータの時点も、都道府県ごとに表示します。</p>
@@ -655,7 +656,7 @@ def area_pref(pref_code: str):
               '%sの津波浸水想定に重ねて数えた実測値です。市域の面積に対する割合ではありません。</p>' % pref)
     head = _area_head(pref, pref, "pref/" + pref_code, desc,
                       title="%sの津波浸水想定｜市区町村別の避難場所と浸水想定 | Kurage" % pref)
-    return HTMLResponse(head + _STYLE + _AREA_CSS + '</head><body><div class="wrap">' + body + "</div></body></html>")
+    return HTMLResponse(head + _STYLE + _AREA_CSS + '</head><body><div class="wrap">' + body.replace('</h1>', '</h1>' + kbousai_link.bar('ktsunami-area', ''), 1) + "</div></body></html>")
 
 
 @app.get("/area/{slug}", response_class=HTMLResponse)
@@ -744,7 +745,7 @@ def area(slug: str):
     head = _area_head(full, pref, SLUG_BY_CODE.get(d["muni_code"], d["muni_code"]), desc,
                       title=("%sの津波浸水想定｜避難場所%s件中%s件が浸水想定区域内 | Kurage" % (full, f"{n:,}", f"{ino:,}"))
                       if ino else ("%sの津波浸水想定｜避難場所%s件はすべて区域外 | Kurage" % (full, f"{n:,}")))
-    return HTMLResponse(head + _STYLE + _AREA_CSS + '</head><body><div class="wrap">' + body + _SCRIPT + "</body></html>")
+    return HTMLResponse(head + _STYLE + _AREA_CSS + '</head><body><div class="wrap">' + body.replace('</h1>', '</h1>' + kbousai_link.bar('ktsunami-area', full), 1) + _SCRIPT + "</body></html>")
 
 
 @app.get("/area", response_class=HTMLResponse)
@@ -770,7 +771,7 @@ def area_index():
               '津波浸水想定そのものが公表されていないためで、安全という意味ではありません。</p>')
     head = _area_head("地域一覧", "全国", "", desc,
                       title="全国の津波浸水想定｜都道府県・市区町村別の一覧 | Kurage")
-    return HTMLResponse(head + _STYLE + _AREA_CSS + '</head><body><div class="wrap">' + body + "</div></body></html>")
+    return HTMLResponse(head + _STYLE + _AREA_CSS + '</head><body><div class="wrap">' + body.replace('</h1>', '</h1>' + kbousai_link.bar('ktsunami-area', ''), 1) + "</div></body></html>")
 
 
 _LLMS_BODY = """# Kurage 津波浸水想定マップ
