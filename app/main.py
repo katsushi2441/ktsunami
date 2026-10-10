@@ -642,7 +642,7 @@ def area_pref(pref_code: str):
     rows = "".join('<tr><td><a href="/ktsunami.php/area/%s">%s</a></td><td>%s</td><td>%s</td><td>%s</td></tr>'
                    % (SLUG_BY_CODE[d["muni_code"]], d["muni"], f'{d["shelters"]:,}',
                       f'{d["inundated"]:,}', _esc(d["max_label"]) or "—") for d in lst)
-    body = ('<h1><a href="/ktsunami.php/">%sの津波浸水想定（市区町村一覧）</a></h1>' % pref
+    body = ('<h1><a href="/ktsunami.php/">%sの津波ハザードマップ（市区町村一覧）</a></h1>' % pref
             + '<p class="lead">%sは津波浸水想定を<strong>%s区画</strong>公表しています（データ時点 %s）。'
               'この県の<strong>%s市区町村</strong>のうち<strong>%s市区町村</strong>で、'
               '指定緊急避難場所が浸水想定区域の中にあります。避難先そのものが浸かる想定かどうかは、'
@@ -655,7 +655,7 @@ def area_pref(pref_code: str):
             + '<p class="src">避難所の件数は国土地理院「指定緊急避難場所データ」（CC BY 4.0）の施設の座標を、'
               '%sの津波浸水想定に重ねて数えた実測値です。市域の面積に対する割合ではありません。</p>' % pref)
     head = _area_head(pref, pref, "pref/" + pref_code, desc,
-                      title="%sの津波浸水想定｜市区町村別の避難場所と浸水想定 | Kurage" % pref)
+                      title="%sの津波ハザードマップ｜市区町村別の浸水想定と避難場所 | Kurage" % pref)
     return HTMLResponse(head + _STYLE + _AREA_CSS + '</head><body><div class="wrap">' + body.replace('</h1>', '</h1>' + kbousai_link.bar('ktsunami-area', ''), 1) + "</div></body></html>")
 
 
@@ -721,7 +721,7 @@ def area(slug: str):
                                      % (SLUG_BY_CODE[x["muni_code"]], x["muni"], f'{x["inundated"]:,}') for x in sib),
                        d["pref_code"], pref))
 
-    body = ('<h1><a href="/ktsunami.php/">%sの津波浸水想定マップ</a></h1>' % full + lead
+    body = ('<h1><a href="/ktsunami.php/">%sの津波ハザードマップ（浸水想定）</a></h1>' % full + lead
             + '<div class="card"><form id="f"><input id="q" placeholder="例: %s" value="%s" autocomplete="off">'
               '<button id="b">調べる</button></form><div class="res" id="r"></div></div>'
               % (_esc(example), _esc(example))
@@ -743,8 +743,8 @@ def area(slug: str):
               '避難場所の件数は施設の座標を浸水想定に重ねて数えた実測値で、市域の面積に対する割合ではありません。</p>'
               % (pref, cells, _esc(vint)))
     head = _area_head(full, pref, SLUG_BY_CODE.get(d["muni_code"], d["muni_code"]), desc,
-                      title=("%sの津波浸水想定｜避難場所%s件中%s件が浸水想定区域内 | Kurage" % (full, f"{n:,}", f"{ino:,}"))
-                      if ino else ("%sの津波浸水想定｜避難場所%s件はすべて区域外 | Kurage" % (full, f"{n:,}")))
+                      title=("%sの津波ハザードマップ｜浸水想定を住所で判定・避難場所%s件中%s件が区域内 | Kurage" % (full, f"{n:,}", f"{ino:,}"))
+                      if ino else ("%sの津波ハザードマップ｜浸水想定を住所で判定・避難場所%s件はすべて区域外 | Kurage" % (full, f"{n:,}")))
     return HTMLResponse(head + _STYLE + _AREA_CSS + '</head><body><div class="wrap">' + body.replace('</h1>', '</h1>' + kbousai_link.bar('ktsunami-area', full), 1) + _SCRIPT + "</body></html>")
 
 
